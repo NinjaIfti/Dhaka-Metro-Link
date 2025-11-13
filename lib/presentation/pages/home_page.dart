@@ -2,6 +2,7 @@
 import 'package:flutter/material.dart';
 import 'package:metro_link/core/theme/app_theme.dart';
 import 'package:metro_link/core/di/service_locator.dart';
+import 'package:metro_link/core/services/auth_service.dart';
 import 'package:metro_link/domain/entities/card.dart';
 import 'package:metro_link/domain/entities/journey.dart';
 import 'package:metro_link/domain/entities/station.dart';
@@ -23,13 +24,14 @@ class _HomePageState extends State<HomePage> {
   final CardRepository _cardRepository = sl<CardRepository>();
   final JourneyRepository _journeyRepository = sl<JourneyRepository>();
   final StationRepository _stationRepository = sl<StationRepository>();
+  final AuthService _authService = sl<AuthService>();
 
   // Data loaded from repository
   MetroCard? _demoCard;
   List<Journey> _recentJourneys = [];
   List<Station> _stations = [];
   bool _isLoading = true;
-  String _userId = 'user_001'; // Will be replaced with actual auth later
+  String? _userId;
 
   int _selectedIndex = 0;
 
@@ -41,12 +43,23 @@ class _HomePageState extends State<HomePage> {
 
   Future<void> _loadData() async {
     try {
+      // Get authenticated user ID
+      _userId = _authService.currentUserId;
+
+      if (_userId == null) {
+        debugPrint('No authenticated user found');
+        setState(() {
+          _isLoading = false;
+        });
+        return;
+      }
+
       // Load user's cards
-      final cards = await _cardRepository.getActiveCardsByUserId(_userId);
+      final cards = await _cardRepository.getActiveCardsByUserId(_userId!);
 
       // Load recent journeys
       final journeys =
-          await _journeyRepository.getRecentJourneysByUserId(_userId, limit: 5);
+          await _journeyRepository.getRecentJourneysByUserId(_userId!, limit: 5);
 
       // Load stations
       final stations = await _stationRepository.getAllStations();

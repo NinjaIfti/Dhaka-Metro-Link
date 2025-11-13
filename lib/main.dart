@@ -2,7 +2,9 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:metro_link/core/theme/app_theme.dart';
+import 'package:metro_link/core/services/auth_service.dart';
 import 'package:metro_link/presentation/pages/home_page.dart';
+import 'package:metro_link/presentation/pages/login_page.dart';
 import 'package:metro_link/core/di/service_locator.dart';
 
 void main() async {
@@ -53,14 +55,26 @@ class _SplashScreenState extends State<SplashScreen> {
   @override
   void initState() {
     super.initState();
-    // Navigate to the next screen after a delay
-    Future.delayed(const Duration(seconds: 3), () {
-      if (mounted) {
-        Navigator.of(context).pushReplacement(
-          MaterialPageRoute(builder: (_) => const HomePage()),
-        );
-      }
-    });
+    _checkAuthAndNavigate();
+  }
+
+  Future<void> _checkAuthAndNavigate() async {
+    // Show splash for minimum 2 seconds
+    await Future.delayed(const Duration(seconds: 2));
+
+    if (!mounted) return;
+
+    // Check authentication status
+    final authService = sl<AuthService>();
+    final isAuthenticated = authService.isAuthenticated;
+
+    if (mounted) {
+      Navigator.of(context).pushReplacement(
+        MaterialPageRoute(
+          builder: (_) => isAuthenticated ? const HomePage() : const LoginPage(),
+        ),
+      );
+    }
   }
 
   @override

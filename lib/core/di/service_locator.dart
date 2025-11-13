@@ -1,6 +1,8 @@
 import 'package:get_it/get_it.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 import '../database/database_helper.dart';
 import '../utils/data_seeder.dart';
+import '../services/auth_service.dart';
 import '../../domain/repositories/user_repository.dart';
 import '../../domain/repositories/card_repository.dart';
 import '../../domain/repositories/station_repository.dart';
@@ -15,6 +17,10 @@ import '../../data/repositories/transaction_repository_impl.dart';
 final sl = GetIt.instance;
 
 Future<void> initializeDependencies() async {
+  // Shared Preferences
+  final sharedPreferences = await SharedPreferences.getInstance();
+  sl.registerSingleton<SharedPreferences>(sharedPreferences);
+
   // Database
   sl.registerLazySingleton<DatabaseHelper>(() => DatabaseHelper.instance);
 
@@ -37,6 +43,11 @@ Future<void> initializeDependencies() async {
 
   sl.registerLazySingleton<TransactionRepository>(
     () => TransactionRepositoryImpl(sl()),
+  );
+
+  // Services
+  sl.registerLazySingleton<AuthService>(
+    () => AuthService(sl(), sl()),
   );
 
   // Utilities
