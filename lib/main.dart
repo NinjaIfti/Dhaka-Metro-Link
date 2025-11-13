@@ -3,8 +3,13 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:metro_link/core/theme/app_theme.dart';
 import 'package:metro_link/presentation/pages/home_page.dart';
+import 'package:metro_link/core/di/service_locator.dart';
+
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
+
+  // Initialize dependency injection
+  await initializeDependencies();
 
   // Set preferred orientations
   await SystemChrome.setPreferredOrientations([

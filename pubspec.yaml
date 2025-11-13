@@ -19,6 +19,7 @@ dependencies:
   # Local storage
   sqflite: ^2.3.0
   path_provider: ^2.1.1
+  path: ^1.8.3
 
   # NFC package
   flutter_nfc_kit: ^3.3.1
