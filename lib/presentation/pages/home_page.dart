@@ -1,8 +1,14 @@
 // lib/presentation/pages/home_page.dart
 import 'package:flutter/material.dart';
 import 'package:metro_link/core/theme/app_theme.dart';
+import 'package:metro_link/core/di/service_locator.dart';
+import 'package:metro_link/core/services/auth_service.dart';
 import 'package:metro_link/domain/entities/card.dart';
 import 'package:metro_link/domain/entities/journey.dart';
+import 'package:metro_link/domain/entities/station.dart';
+import 'package:metro_link/domain/repositories/card_repository.dart';
+import 'package:metro_link/domain/repositories/journey_repository.dart';
+import 'package:metro_link/domain/repositories/station_repository.dart';
 import 'package:metro_link/presentation/pages/scan_card_page.dart';
 import 'package:metro_link/presentation/pages/recharge_page.dart';
 import 'package:metro_link/presentation/pages/profile_page.dart';
@@ -15,46 +21,76 @@ class HomePage extends StatefulWidget {
 }
 
 class _HomePageState extends State<HomePage> {
-  // Mock data for development - will be replaced with actual data later
-  final MetroCard _demoCard = MetroCard(
-    id: '1',
-    cardNumber: '1234567890',
-    balance: 250.0,
-    lastUsed: DateTime.now().subtract(const Duration(days: 2)),
-    isActive: true,
-    userId: 'user1',
-  );
+  final CardRepository _cardRepository = sl<CardRepository>();
+  final JourneyRepository _journeyRepository = sl<JourneyRepository>();
+  final StationRepository _stationRepository = sl<StationRepository>();
+  final AuthService _authService = sl<AuthService>();
 
-  final List<Journey> _recentJourneys = [
-    Journey(
-      id: '1',
-      cardId: '1',
-      userId: 'user1',
-      startStationId: 'station1',
-      endStationId: 'station5',
-      startTime: DateTime.now().subtract(const Duration(days: 1, hours: 2)),
-      endTime: DateTime.now().subtract(const Duration(days: 1, hours: 1)),
-      fare: 25.0,
-      status: JourneyStatus.completed,
-    ),
-    Journey(
-      id: '2',
-      cardId: '1',
-      userId: 'user1',
-      startStationId: 'station3',
-      endStationId: 'station7',
-      startTime: DateTime.now().subtract(const Duration(days: 3, hours: 5)),
-      endTime: DateTime.now()
-          .subtract(const Duration(days: 3, hours: 4, minutes: 15)),
-      fare: 30.0,
-      status: JourneyStatus.completed,
-    ),
-  ];
+  // Data loaded from repository
+  MetroCard? _demoCard;
+  List<Journey> _recentJourneys = [];
+  List<Station> _stations = [];
+  bool _isLoading = true;
+  String? _userId;
 
   int _selectedIndex = 0;
 
   @override
+  void initState() {
+    super.initState();
+    _loadData();
+  }
+
+  Future<void> _loadData() async {
+    try {
+      // Get authenticated user ID
+      _userId = _authService.currentUserId;
+
+      if (_userId == null) {
+        debugPrint('No authenticated user found');
+        setState(() {
+          _isLoading = false;
+        });
+        return;
+      }
+
+      // Load user's cards
+      final cards = await _cardRepository.getActiveCardsByUserId(_userId!);
+
+      // Load recent journeys
+      final journeys =
+          await _journeyRepository.getRecentJourneysByUserId(_userId!, limit: 5);
+
+      // Load stations
+      final stations = await _stationRepository.getAllStations();
+
+      setState(() {
+        _demoCard = cards.isNotEmpty ? cards.first : null;
+        _recentJourneys = journeys;
+        _stations = stations;
+        _isLoading = false;
+      });
+    } catch (e) {
+      debugPrint('Error loading data: $e');
+      setState(() {
+        _isLoading = false;
+      });
+    }
+  }
+
+  @override
   Widget build(BuildContext context) {
+    if (_isLoading) {
+      return Scaffold(
+        appBar: AppBar(
+          title: const Text('MetroLink'),
+        ),
+        body: const Center(
+          child: CircularProgressIndicator(),
+        ),
+      );
+    }
+
     return Scaffold(
       appBar: AppBar(
         title: const Text('MetroLink'),
@@ -141,6 +177,60 @@ class _HomePageState extends State<HomePage> {
   }
 
   Widget _buildCardWidget() {
+    if (_demoCard == null) {
+      return Card(
+        elevation: 4,
+        shape: RoundedRectangleBorder(
+          borderRadius: BorderRadius.circular(16),
+        ),
+        color: AppTheme.primaryColor,
+        child: Padding(
+          padding: const EdgeInsets.all(32.0),
+          child: Center(
+            child: Column(
+              children: [
+                const Icon(
+                  Icons.credit_card_off,
+                  size: 48,
+                  color: Colors.white70,
+                ),
+                const SizedBox(height: 16),
+                const Text(
+                  'No Card Found',
+                  style: TextStyle(
+                    color: Colors.white,
+                    fontSize: 18,
+                    fontWeight: FontWeight.bold,
+                  ),
+                ),
+                const SizedBox(height: 8),
+                const Text(
+                  'Scan your metro card to get started',
+                  style: TextStyle(
+                    color: Colors.white70,
+                    fontSize: 14,
+                  ),
+                ),
+                const SizedBox(height: 16),
+                ElevatedButton(
+                  onPressed: () {
+                    Navigator.of(context).push(
+                      MaterialPageRoute(builder: (_) => const ScanCardPage()),
+                    );
+                  },
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: Colors.white,
+                    foregroundColor: AppTheme.primaryColor,
+                  ),
+                  child: const Text('Scan Card'),
+                ),
+              ],
+            ),
+          ),
+        ),
+      );
+    }
+
     return Card(
       elevation: 4,
       shape: RoundedRectangleBorder(
@@ -171,7 +261,7 @@ class _HomePageState extends State<HomePage> {
                     borderRadius: BorderRadius.circular(12),
                   ),
                   child: Text(
-                    _demoCard.isActive ? 'Active' : 'Inactive',
+                    _demoCard!.isActive ? 'Active' : 'Inactive',
                     style: const TextStyle(
                       color: Colors.white,
                       fontSize: 12,
@@ -182,7 +272,7 @@ class _HomePageState extends State<HomePage> {
             ),
             const SizedBox(height: 24),
             Text(
-              'Card No: ${_demoCard.cardNumber}',
+              'Card No: ${_demoCard!.cardNumber}',
               style: const TextStyle(
                 color: Colors.white70,
                 fontSize: 14,
@@ -190,7 +280,7 @@ class _HomePageState extends State<HomePage> {
             ),
             const SizedBox(height: 8),
             Text(
-              'Last Used: ${_formatDate(_demoCard.lastUsed)}',
+              'Last Used: ${_demoCard!.lastUsed != null ? _formatDate(_demoCard!.lastUsed!) : "Never"}',
               style: const TextStyle(
                 color: Colors.white70,
                 fontSize: 14,
@@ -212,7 +302,7 @@ class _HomePageState extends State<HomePage> {
                     ),
                     const SizedBox(height: 4),
                     Text(
-                      '৳ ${_demoCard.balance.toStringAsFixed(2)}',
+                      '৳ ${_demoCard!.balance.toStringAsFixed(2)}',
                       style: const TextStyle(
                         color: Colors.white,
                         fontSize: 24,
@@ -225,7 +315,7 @@ class _HomePageState extends State<HomePage> {
                   onPressed: () {
                     Navigator.of(context).push(
                       MaterialPageRoute(
-                        builder: (_) => RechargePage(card: _demoCard),
+                        builder: (_) => RechargePage(card: _demoCard!),
                       ),
                     );
                   },
@@ -470,23 +560,34 @@ class _HomePageState extends State<HomePage> {
   }
 
   Widget _buildCardDetails() {
+    if (_demoCard == null) {
+      return const Card(
+        child: Padding(
+          padding: EdgeInsets.all(32.0),
+          child: Center(
+            child: Text('No card data available'),
+          ),
+        ),
+      );
+    }
+
     return Card(
       child: Padding(
         padding: const EdgeInsets.all(16.0),
         child: Column(
           children: [
-            _buildDetailRow(Icons.credit_card, 'Card Number', _demoCard.cardNumber),
+            _buildDetailRow(Icons.credit_card, 'Card Number', _demoCard!.cardNumber),
             const Divider(),
             _buildDetailRow(Icons.calendar_today, 'Last Used',
-                _formatDate(_demoCard.lastUsed)),
+                _demoCard!.lastUsed != null ? _formatDate(_demoCard!.lastUsed!) : 'Never'),
             const Divider(),
             _buildDetailRow(Icons.verified, 'Status',
-                _demoCard.isActive ? 'Active' : 'Inactive'),
+                _demoCard!.isActive ? 'Active' : 'Inactive'),
             const Divider(),
             _buildDetailRow(Icons.account_balance_wallet, 'Balance',
-                '৳ ${_demoCard.balance.toStringAsFixed(2)}'),
+                '৳ ${_demoCard!.balance.toStringAsFixed(2)}'),
             const Divider(),
-            _buildDetailRow(Icons.person, 'Owner', 'User Name'), // Replace with actual user name
+            _buildDetailRow(Icons.person, 'Owner', 'Rakib Ahmed'), // Will be replaced with actual user data
           ],
         ),
       ),
@@ -809,7 +910,7 @@ class _HomePageState extends State<HomePage> {
             ] else ...[
               const SizedBox(height: 8),
               Text(
-                'Added to card ${_demoCard.cardNumber}',
+                'Added to card ${_demoCard?.cardNumber ?? "N/A"}',
                 style: TextStyle(
                   color: AppTheme.textSecondaryColor,
                 ),
@@ -822,26 +923,6 @@ class _HomePageState extends State<HomePage> {
   }
 
   Widget _buildMapTab() {
-
-    final List<Map<String, dynamic>> stations = [
-      {'name': 'Uttara North', 'status': 'Open', 'line': 'MRT Line 6'},
-      {'name': 'Uttara Center', 'status': 'Open', 'line': 'MRT Line 6'},
-      {'name': 'Uttara South', 'status': 'Open', 'line': 'MRT Line 6'},
-      {'name': 'Pallabi', 'status': 'Open', 'line': 'MRT Line 6'},
-      {'name': 'Mirpur 11', 'status': 'Open', 'line': 'MRT Line 6'},
-      {'name': 'Mirpur 10', 'status': 'Open', 'line': 'MRT Line 6'},
-      {'name': 'Kazipara', 'status': 'Open', 'line': 'MRT Line 6'},
-      {'name': 'Shewrapara', 'status': 'Open', 'line': 'MRT Line 6'},
-      {'name': 'Agargaon', 'status': 'Open', 'line': 'MRT Line 6'},
-      {'name': 'Bijoy Sarani', 'status': 'Open', 'line': 'MRT Line 6'},
-      {'name': 'Farmgate', 'status': 'Open', 'line': 'MRT Line 6'},
-      {'name': 'Karwan Bazar', 'status': 'Open', 'line': 'MRT Line 6'},
-      {'name': 'Shahbagh', 'status': 'Open', 'line': 'MRT Line 6'},
-      {'name': 'Dhaka University', 'status': 'Open', 'line': 'MRT Line 6'},
-      {'name': 'Bangladesh Secretariat', 'status': 'Open', 'line': 'MRT Line 6'},
-      {'name': 'Motijheel', 'status': 'Open', 'line': 'MRT Line 6'},
-    ];
-
     return Column(
       children: [
         Container(
@@ -883,43 +964,47 @@ class _HomePageState extends State<HomePage> {
           ),
         ),
         Expanded(
-          child: ListView.builder(
-            padding: const EdgeInsets.symmetric(vertical: 8.0),
-            itemCount: stations.length,
-            itemBuilder: (context, index) {
-              final station = stations[index];
-              return _buildStationItem(station, index);
-            },
-          ),
+          child: _stations.isEmpty
+              ? const Center(
+                  child: Text('No stations available'),
+                )
+              : ListView.builder(
+                  padding: const EdgeInsets.symmetric(vertical: 8.0),
+                  itemCount: _stations.length,
+                  itemBuilder: (context, index) {
+                    final station = _stations[index];
+                    return _buildStationItem(station, index);
+                  },
+                ),
         ),
       ],
     );
   }
 
-  Widget _buildStationItem(Map<String, dynamic> station, int index) {
+  Widget _buildStationItem(Station station, int index) {
     return ListTile(
       leading: CircleAvatar(
         backgroundColor: AppTheme.primaryColor,
         child: Text(
-          '${index + 1}',
+          '${station.position}',
           style: const TextStyle(color: Colors.white),
         ),
       ),
       title: Text(
-        station['name'],
+        station.name,
         style: const TextStyle(
           fontWeight: FontWeight.bold,
         ),
       ),
-      subtitle: Text(station['line']),
+      subtitle: Text('MRT ${station.lineId.toUpperCase().replaceAll('_', ' ')}'),
       trailing: Container(
         padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
         decoration: BoxDecoration(
-          color: station['status'] == 'Open' ? Colors.green : Colors.orange,
+          color: station.isActive ? Colors.green : Colors.orange,
           borderRadius: BorderRadius.circular(12),
         ),
         child: Text(
-          station['status'],
+          station.isActive ? 'Open' : 'Closed',
           style: const TextStyle(
             color: Colors.white,
             fontSize: 12,
